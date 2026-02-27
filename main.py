@@ -74,7 +74,7 @@ async def handle_connection(ws):
                     await source.capture_frame(frame)
 
 async def main():
-    async with websockets.serve(handle_connection, "localhost", 8765):
+    async with websockets.serve(handle_connection, "0.0.0.0", 8765):
         print("Bridge running on 8765")
         await asyncio.Future()
 
