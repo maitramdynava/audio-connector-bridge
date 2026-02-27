@@ -1,0 +1,81 @@
+import asyncio
+import websockets
+import json
+import base64
+from livekit import rtc
+
+LIVEKIT_URL = "wss://voice-agent-7t8ve31g.livekit.cloud"
+API_KEY = "APIbQVgTaAddcUQ"
+API_SECRET = "hi5iBYBCmk65N4S4k8Rfyj9IzzdBEzCbTjy0KGSRzHB"
+ROOM_NAME = "genesys-room"
+
+async def create_room():
+    token = rtc.AccessToken(API_KEY, API_SECRET) \
+        .with_identity("bridge") \
+        .with_grants(rtc.VideoGrant(room_join=True, room=ROOM_NAME)) \
+        .to_jwt()
+
+    room = rtc.Room()
+    await room.connect(LIVEKIT_URL, token)
+    return room
+
+async def handle_connection(ws):
+    room = await create_room()
+
+    # ---- Publish track (Caller → Agent) ----
+    source = rtc.AudioSource(48000, 1)
+    local_track = rtc.LocalAudioTrack.create_audio_track("caller", source)
+    await room.local_participant.publish_track(local_track)
+
+    # ---- Subscribe to agent track (Agent → Caller) ----
+    async def livekit_to_genesys():
+        @room.on("track_subscribed")
+        def on_track(track, pub, participant):
+            if track.kind == rtc.TrackKind.KIND_AUDIO:
+                asyncio.create_task(forward_agent_audio(track))
+
+        async def forward_agent_audio(track):
+            async for frame in track:
+                pcm_48k = frame.data
+
+                # Downsample to 8kHz
+                pcm_8k = resample_audio(pcm_48k, 48000, 8000)
+
+                # 20ms chunks (320 bytes)
+                chunk_size = 320
+                for i in range(0, len(pcm_8k), chunk_size):
+                    chunk = pcm_8k[i:i+chunk_size]
+                    if len(chunk) == chunk_size:
+                        payload = base64.b64encode(chunk).decode()
+
+                        msg = {
+                            "event": "media",
+                            "media": {"payload": payload}
+                        }
+
+                        await ws.send(json.dumps(msg))
+
+    asyncio.create_task(livekit_to_genesys())
+
+    # ---- Genesys → LiveKit ----
+    async for message in ws:
+        data = json.loads(message)
+
+        if data.get("event") == "media":
+            payload = base64.b64decode(data["media"]["payload"])
+
+            # Upsample 8k → 48k
+            pcm_48k = resample_audio(payload, 8000, 48000)
+
+            frame_size = 960 * 2  # 20ms @ 48kHz
+            for i in range(0, len(pcm_48k), frame_size):
+                frame = pcm_48k[i:i+frame_size]
+                if len(frame) == frame_size:
+                    await source.capture_frame(frame)
+
+async def main():
+    async with websockets.serve(handle_connection, "localhost", 8765):
+        print("Bridge running on 8765")
+        await asyncio.Future()
+
+asyncio.run(main())
