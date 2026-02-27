@@ -3,17 +3,22 @@ import websockets
 import json
 import base64
 from livekit import rtc
+from livekit.api.access_token import AccessToken
+from livekit.api.access_token import VideoGrants
 
 LIVEKIT_URL = "wss://voice-agent-7t8ve31g.livekit.cloud"
 API_KEY = "APIbQVgTaAddcUQ"
 API_SECRET = "hi5iBYBCmk65N4S4k8Rfyj9IzzdBEzCbTjy0KGSRzHB"
 ROOM_NAME = "genesys-room"
 
+def create_livekit_token(identity: str, room: str) -> str:
+    token = AccessToken(api_key=API_KEY, api_secret=API_SECRET)
+    token.with_identity(identity)
+    token.with_grants(VideoGrants(room_join=True, room=room))
+    return token.to_jwt()
+
 async def create_room():
-    token = rtc.AccessToken(API_KEY, API_SECRET) \
-        .with_identity("bridge") \
-        .with_grants(rtc.VideoGrant(room_join=True, room=ROOM_NAME)) \
-        .to_jwt()
+    token = create_livekit_token("bridge-bot", "genesys-room")
 
     room = rtc.Room()
     await room.connect(LIVEKIT_URL, token)
