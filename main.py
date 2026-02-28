@@ -38,9 +38,12 @@ class Session:
 
             response = {
                 "type": "open",
+                "version": payload.get("version", "2"),
                 "id": payload["id"],
-                "seq": payload["seq"],
-                "serverseq": 1
+                "seq": payload["seq"],              # MUST mirror client seq
+                "serverseq": payload["serverseq"] + 1,
+                "position": payload.get("position", "PT0.0S"),
+                "parameters": {}
             }
 
             await self.ws.send(json.dumps(response))
