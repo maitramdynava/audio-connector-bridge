@@ -3,12 +3,53 @@ import asyncio
 import json
 import websockets
 
+from livekit import rtc
+from livekit.api.access_token import AccessToken
+from livekit.api.access_token import VideoGrants
+import numpy as np
+from scipy.signal import resample
+import audioop
+
+LIVEKIT_URL = "wss://voice-agent-7t8ve31g.livekit.cloud"
+API_KEY = "APIbQVgTaAddcUQ"
+API_SECRET = "hi5iBYBCmk65N4S4k8Rfyj9IzzdBEzCbTjy0KGSRzHB"
+
+def create_livekit_token(identity: str, room: str) -> str:
+    token = AccessToken(api_key=API_KEY, api_secret=API_SECRET)
+    token.with_identity(identity)
+    token.with_grants(VideoGrants(room_join=True, room=room))
+    return token.to_jwt()
+
+async def create_room(identity: str, room: str):
+    token = create_livekit_token(identity, room)
+
+    room = rtc.Room()
+    await room.connect(LIVEKIT_URL, token)
+    return room
+
+# --- Helper: Resample PCM16 bytes ---
+def resample_audio(pcm16_bytes: bytes, in_rate: int, out_rate: int) -> bytes:
+    audio = np.frombuffer(pcm16_bytes, dtype=np.int16)
+    n_samples = int(len(audio) * out_rate / in_rate)
+    resampled = resample(audio, n_samples).astype(np.int16)
+    return resampled.tobytes()
+
+# --- Forward LiveKit agent audio → Genesys ---
+async def forward_agent_audio(track, ws):
+    async for frame in track:
+        pcm16_48k = frame.data  # PCM16 48kHz
+        pcm16_8k = resample_audio(pcm16_48k, 48000, 8000)
+        pcmu_bytes = audioop.lin2ulaw(pcm16_8k, 2)
+        await ws.send(pcmu_bytes)
+
 class Session:
     def __init__(self, ws, session_id, url):
         self.ws = ws
         self.session_id = session_id
         self.url = url
         self.send_seq = 1
+        self.livekit_room = None
+        self.local_audio_source = None
 
     def close(self):
         # Clean up any resources, LiveKit tracks, etc.
@@ -20,7 +61,18 @@ class Session:
     async def process_binary_message(self, data: bytes):
         # Handle Genesys audio payload
         print(f"Received {len(data)} bytes")
-        # Forward to LiveKit if needed
+
+        if not self.livekit_room or not self.local_audio_source:
+            print(f"[{self.session_id}] Received audio before OPEN. Ignoring.")
+            return
+
+        # Convert PCMU → PCM16 → float32 for LiveKit
+        pcm16_bytes = audioop.ulaw2lin(data, 2)
+        audio_array = np.frombuffer(pcm16_bytes, dtype=np.int16)
+        audio_float32 = audio_array.astype(np.float32) / 32768.0
+
+        self.local_audio_source.write(audio_float32.tobytes())
+        print(f"[{self.session_id}] Forwarded {len(data)} bytes to LiveKit")
 
     async def process_text_message(self, message: str):
         payload = json.loads(message)
@@ -41,8 +93,23 @@ class Session:
             "id": payload["id"],
         }
 
+        # Increment server seq for next message
+        self.send_seq += 1
+
         if msg_type == "open":
             print("AudioHook stream opened")
+
+            self.livekit_room = await create_room(self.session_id, f"room_{self.session_id}")
+            # Create local track for Genesys caller → LiveKit agent
+            self.local_audio_source = rtc.AudioSource(48000, 1)
+            local_track = rtc.LocalAudioTrack.create_audio_track("caller", self.local_audio_source)
+            await self.livekit_room.local_participant.publish_track(local_track)
+
+            # Subscribe to agent audio → Genesys
+            @self.livekit_room.on("track_subscribed")
+            def on_track(track, pub, participant):
+                if track.kind == rtc.TrackKind.KIND_AUDIO:
+                    asyncio.create_task(forward_agent_audio(track, self.ws))
 
             response.update({
                 "type": "opened",
@@ -57,9 +124,6 @@ class Session:
             print(f"Forward JSON message: {response}")
 
             await self.ws.send(json.dumps(response))
-
-            # Increment server seq for next message
-            self.send_seq += 1
 
         elif msg_type == "close":
             print("Stream closing")
