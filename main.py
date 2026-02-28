@@ -86,12 +86,29 @@ class Session:
             print(f"[{self.session_id}] Received audio before OPEN. Ignoring.")
             return
 
-        # Convert PCMU → PCM16 → float32 for LiveKit
-        pcm16_array = ulaw2lin(data)  # Returns a NumPy int16 array
-        audio_float32 = pcm16_array.astype(np.float32) / 32768.0  # Scale to [-1.0, 1.0]
+        # 1. Convert PCMU → PCM16
+        pcm16_array = ulaw2lin(data)  # returns numpy int16 array
 
-        self.local_audio_source.write(audio_float32.tobytes())
-        print(f"[{self.session_id}] Forwarded {len(data)} bytes to LiveKit")
+        # 2. Resample to 48 kHz (LiveKit expects 48kHz)
+        pcm16_8k = pcm16_array.tobytes()
+        pcm16_48k = resample_audio(pcm16_8k, 8000, 48000)
+
+        # 3. Build an AudioFrame
+        # LiveKit Python expects frames of a fixed duration (e.g., 10 ms)
+        # Calculate samples per channel
+        samples_per_channel = len(pcm16_48k) // (2 * 1)  # 2 bytes per sample, 1 channel
+        audio_frame = rtc.AudioFrame.create(48000, 1, samples_per_channel)
+
+        # Copy our resampled PCM16 into the frame's buffer
+        np.copyto(
+            np.frombuffer(audio_frame.data, dtype=np.int16),
+            np.frombuffer(pcm16_48k, dtype=np.int16)
+        )
+
+        # 4. Capture frame via AudioSource
+        await self.local_audio_source.capture_frame(audio_frame)
+
+        print(f"[{self.session_id}] Published {len(data)} bytes to LiveKit")
 
     async def process_text_message(self, message: str):
         payload = json.loads(message)
