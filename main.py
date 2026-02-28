@@ -55,6 +55,9 @@ def resample_audio(pcm16_bytes: bytes, in_rate: int, out_rate: int) -> bytes:
     resampled = resample(audio, n_samples).astype(np.int16)
     return resampled.tobytes()
 
+FRAME_SIZE = 160  # 20ms @ 8kHz
+FRAME_DURATION = 0.02  # 20ms
+
 # --- Forward LiveKit agent audio → Genesys ---
 async def forward_agent_audio(track, ws):
     audio_stream = AudioStream(track)
@@ -66,7 +69,17 @@ async def forward_agent_audio(track, ws):
         pcm16_8k = resample_audio(pcm16_48k, 48000, 8000)
         pcmu_bytes = lin2ulaw(pcm16_8k)
 
-        await ws.send(pcmu_bytes)
+        print("PCMU bytes: ", len(pcmu_bytes))
+
+        # Chunk into 20ms frames
+        for i in range(0, len(pcmu_bytes), FRAME_SIZE):
+            chunk = pcmu_bytes[i:i + FRAME_SIZE]
+
+            if len(chunk) < FRAME_SIZE:
+                break
+
+            await ws.send(chunk)
+            await asyncio.sleep(FRAME_DURATION)
 
 class Session:
     def __init__(self, ws, session_id, url):
