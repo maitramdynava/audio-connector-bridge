@@ -61,7 +61,7 @@ FRAME_DURATION = 0.02  # 20ms
 # --- Forward LiveKit agent audio → Genesys ---
 async def forward_agent_audio(track, ws):
     audio_stream = AudioStream(track)
-
+    send_buffer = bytearray()
     async for event in audio_stream:
         frame = event.frame  # AudioFrame
         pcm16_48k = frame.data  # PCM16 @ 48kHz
@@ -69,14 +69,15 @@ async def forward_agent_audio(track, ws):
         pcm16_8k = resample_audio(pcm16_48k, 48000, 8000)
         pcmu_bytes = lin2ulaw(pcm16_8k)
 
+        send_buffer.extend(pcmu_bytes)
+
         # print("PCMU bytes: ", len(pcmu_bytes))
 
-        # Chunk into 20ms frames
-        for i in range(0, len(pcmu_bytes), FRAME_SIZE):
-            chunk = pcmu_bytes[i:i + FRAME_SIZE]
-
-            if len(chunk) < FRAME_SIZE:
-                break
+        # Send only when we have 20ms (160 bytes)
+        while len(send_buffer) >= FRAME_SIZE:
+            chunk = bytes(send_buffer[:FRAME_SIZE])
+            print("chunk len: ", len(chunk))
+            del send_buffer[:FRAME_SIZE]
 
             await ws.send(chunk)
             await asyncio.sleep(FRAME_DURATION)
