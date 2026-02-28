@@ -151,9 +151,6 @@ class Session:
             "id": payload["id"],
         }
 
-        # Increment server seq for next message
-        self.send_seq += 1
-
         if msg_type == "open":
             print("AudioHook stream opened")
 
@@ -193,14 +190,8 @@ class Session:
 
             await self.ws.send(json.dumps(response))
 
-        elif msg_type == "close":
-            print("Stream closing")
-            await self.livekit_room.disconnect()
-
-        elif msg_type == "error":
-            print("Stream closing")
-            await self.livekit_room.disconnect()
-
+            # Increment server seq for next message
+            self.send_seq += 1
         elif msg_type == "ping":
             response.update({
                 "type": "pong",
@@ -210,6 +201,16 @@ class Session:
             print(f"Forward JSON message: {response}")
 
             await self.ws.send(json.dumps(response))
+
+            # Increment server seq for next message
+            self.send_seq += 1
+        elif msg_type == "close":
+            print("Stream closing")
+            await self.livekit_room.disconnect()
+
+        elif msg_type == "error":
+            print("Stream closing")
+            await self.livekit_room.disconnect()
 
 # Session map
 sessions = {}
