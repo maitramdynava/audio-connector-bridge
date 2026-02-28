@@ -59,8 +59,8 @@ async def forward_agent_audio(track, ws):
     async for frame in track:
         pcm16_48k = frame.data  # PCM16 48kHz
         pcm16_8k = resample_audio(pcm16_48k, 48000, 8000)
-        pcmu_bytes = lin2ulaw(pcm16_8k, 2)
-        await ws.send(pcmu_bytes)
+        pcmu_bytes = lin2ulaw(pcm16_8k)
+        await ws.send_bytes(pcmu_bytes)
 
 class Session:
     def __init__(self, ws, session_id, url):
@@ -87,9 +87,8 @@ class Session:
             return
 
         # Convert PCMU → PCM16 → float32 for LiveKit
-        pcm16_bytes = ulaw2lin(data, 2)
-        audio_array = np.frombuffer(pcm16_bytes, dtype=np.int16)
-        audio_float32 = audio_array.astype(np.float32) / 32768.0
+        pcm16_array = ulaw2lin(data)  # Returns a NumPy int16 array
+        audio_float32 = pcm16_array.astype(np.float32) / 32768.0  # Scale to [-1.0, 1.0]
 
         self.local_audio_source.write(audio_float32.tobytes())
         print(f"[{self.session_id}] Forwarded {len(data)} bytes to LiveKit")
