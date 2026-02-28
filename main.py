@@ -26,6 +26,31 @@ class Session:
         print(f"Received JSON message: {payload}")
         # Handle 'start', 'media', 'stop'
 
+        try:
+            payload = json.loads(message)
+        except json.JSONDecodeError:
+            return
+
+        msg_type = payload.get("type")
+
+        if msg_type == "open":
+            print("AudioHook stream opened")
+
+            response = {
+                "type": "open",
+                "id": payload["id"],
+                "seq": payload["seq"],
+                "serverseq": 1
+            }
+
+            await self.ws.send(json.dumps(response))
+
+        elif msg_type == "close":
+            print("Stream closing")
+
+        elif msg_type == "ping":
+            await self.ws.send(json.dumps({"type": "pong"}))
+
 # Session map
 sessions = {}
 
