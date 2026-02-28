@@ -36,15 +36,19 @@ class Session:
         if msg_type == "open":
             print("AudioHook stream opened")
 
+            self.send_seq = 1
+
             response = {
                 "type": "open",
                 "version": payload.get("version", "2"),
                 "id": payload["id"],
-                "seq": payload["seq"],              # MUST mirror client seq
+                "seq": self.send_seq,              # MUST mirror client seq
                 "serverseq": payload["seq"],
                 #"position": payload.get("position", "PT0.0S"),
                 "parameters": {}
             }
+
+            print(f"Forward JSON message: {response}")
 
             await self.ws.send(json.dumps(response))
 
