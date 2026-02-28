@@ -137,18 +137,27 @@ class Session:
         if msg_type == "open":
             print("AudioHook stream opened")
 
-            self.livekit_room = await create_room(self.session_id, f"room_{self.session_id}")
+            token = create_livekit_token(self.session_id, f"room_{self.session_id}")
+            self.livekit_room = rtc.Room()
+
+            def on_track_subscribed(track, pub, participant):
+                print("track subscribed: %s", pub.sid)
+                if track.kind == rtc.TrackKind.KIND_AUDIO:
+                    asyncio.create_task(forward_agent_audio(track, self.ws))
+
+            self.livekit_room.on("track_subscribed", on_track_subscribed)
+
+            await self.livekit_room.connect(LIVEKIT_URL, token)
+
+            # self.livekit_room = await create_room(self.session_id, f"room_{self.session_id}")
             # Create local track for Genesys caller → LiveKit agent
             self.local_audio_source = rtc.AudioSource(48000, 1)
             local_track = rtc.LocalAudioTrack.create_audio_track("caller", self.local_audio_source)
             await self.livekit_room.local_participant.publish_track(local_track)
+            print("published caller track")
 
             # Subscribe to agent audio → Genesys
-            @self.livekit_room.on("track_subscribed")
-            def on_track(track, pub, participant):
-                print("track subscribed: %s", pub.sid)
-                if track.kind == rtc.TrackKind.KIND_AUDIO:
-                    asyncio.create_task(forward_agent_audio(track, self.ws))
+            # @self.livekit_room.on("track_subscribed")
 
             response.update({
                 "type": "opened",
