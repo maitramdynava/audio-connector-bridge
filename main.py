@@ -8,6 +8,7 @@ class Session:
         self.ws = ws
         self.session_id = session_id
         self.url = url
+        self.send_seq = 1
 
     def close(self):
         # Clean up any resources, LiveKit tracks, etc.
@@ -33,25 +34,25 @@ class Session:
 
         msg_type = payload.get("type")
 
+        response = {
+            "version": payload.get("version", "2"),
+            "seq": self.send_seq,
+            "clientseq": payload["seq"],
+            "id": payload["id"],
+        }
+
         if msg_type == "open":
             print("AudioHook stream opened")
 
-            self.send_seq = 1
-
-            response = {
-                "version": payload.get("version", "2"),
+            response.update({
                 "type": "opened",
-                "seq": self.send_seq,
-                "clientseq": payload["seq"],
-                "id": payload["id"],
-                #"position": payload.get("position", "PT0.0S"),
                 "parameters": {
                     "media": payload["parameters"]["media"],
                     "supportedLanguages": [
-                      "en-US", "en-GB", "fi-FI", "sv-SE"
+                        "en-US", "en-GB", "fi-FI", "sv-SE"
                     ]
                 }
-            }
+            })
 
             print(f"Forward JSON message: {response}")
 
@@ -64,7 +65,14 @@ class Session:
             print("Stream closing")
 
         elif msg_type == "ping":
-            await self.ws.send(json.dumps({"type": "pong"}))
+            response.update({
+                "type": "pong",
+                "parameters": {}
+            })
+
+            print(f"Forward JSON message: {response}")
+
+            await self.ws.send(json.dumps(response))
 
 # Session map
 sessions = {}
