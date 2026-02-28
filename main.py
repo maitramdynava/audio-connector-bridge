@@ -69,7 +69,7 @@ async def forward_agent_audio(track, ws):
         pcm16_8k = resample_audio(pcm16_48k, 48000, 8000)
         pcmu_bytes = lin2ulaw(pcm16_8k)
 
-        print("PCMU bytes: ", len(pcmu_bytes))
+        # print("PCMU bytes: ", len(pcmu_bytes))
 
         # Chunk into 20ms frames
         for i in range(0, len(pcmu_bytes), FRAME_SIZE):
