@@ -36,7 +36,7 @@ class Session:
         if msg_type == "open":
             print("AudioHook stream opened")
 
-            self.send_seq = 1
+            self.send_seq = 0
 
             response = {
                 "type": "open",
@@ -51,6 +51,9 @@ class Session:
             print(f"Forward JSON message: {response}")
 
             await self.ws.send(json.dumps(response))
+
+            # Increment server seq for next message
+            self.send_seq += 1
 
         elif msg_type == "close":
             print("Stream closing")
