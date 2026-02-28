@@ -8,7 +8,7 @@ from livekit.api.access_token import AccessToken
 from livekit.api.access_token import VideoGrants
 import numpy as np
 from scipy.signal import resample
-import audioop
+# import audioop
 
 LIVEKIT_URL = "wss://voice-agent-7t8ve31g.livekit.cloud"
 API_KEY = "APIbQVgTaAddcUQ"
@@ -27,6 +27,26 @@ async def create_room(identity: str, room: str):
     await room.connect(LIVEKIT_URL, token)
     return room
 
+def lin2ulaw(pcm16_bytes: bytes) -> bytes:
+    """Convert PCM16 bytes to 8-bit µ-law bytes."""
+    pcm = np.frombuffer(pcm16_bytes, dtype=np.int16)
+    pcm = np.clip(pcm, -32768, 32767)
+    magnitude = np.abs(pcm)
+    exponent = np.floor(np.log2(magnitude + 1e-9)).astype(np.int16)
+    mantissa = (magnitude >> (exponent - 4)) & 0x0F
+    ulaw = ((pcm < 0).astype(np.int16) << 7) | ((exponent & 0x07) << 4) | mantissa
+    ulaw = (ulaw + 128).astype(np.uint8)
+    return ulaw.tobytes()
+
+def ulaw2lin(ulaw_bytes: bytes) -> np.ndarray:
+    """Convert 8-bit µ-law bytes to PCM16 numpy array."""
+    ulaw = np.frombuffer(ulaw_bytes, dtype=np.uint8).astype(np.int16)
+    ulaw = ulaw - 128
+    magnitude = ((ulaw & 0x0F) << 3) + 0x84
+    magnitude <<= ((ulaw & 0x70) >> 4)
+    pcm16 = np.where(ulaw & 0x80, 0x84 - magnitude, magnitude - 0x84)
+    return pcm16
+
 # --- Helper: Resample PCM16 bytes ---
 def resample_audio(pcm16_bytes: bytes, in_rate: int, out_rate: int) -> bytes:
     audio = np.frombuffer(pcm16_bytes, dtype=np.int16)
@@ -39,7 +59,7 @@ async def forward_agent_audio(track, ws):
     async for frame in track:
         pcm16_48k = frame.data  # PCM16 48kHz
         pcm16_8k = resample_audio(pcm16_48k, 48000, 8000)
-        pcmu_bytes = audioop.lin2ulaw(pcm16_8k, 2)
+        pcmu_bytes = lin2ulaw(pcm16_8k, 2)
         await ws.send(pcmu_bytes)
 
 class Session:
@@ -67,7 +87,7 @@ class Session:
             return
 
         # Convert PCMU → PCM16 → float32 for LiveKit
-        pcm16_bytes = audioop.ulaw2lin(data, 2)
+        pcm16_bytes = ulaw2lin(data, 2)
         audio_array = np.frombuffer(pcm16_bytes, dtype=np.int16)
         audio_float32 = audio_array.astype(np.float32) / 32768.0
 
