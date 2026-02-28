@@ -66,7 +66,7 @@ async def forward_agent_audio(track, ws):
         pcm16_8k = resample_audio(pcm16_48k, 48000, 8000)
         pcmu_bytes = lin2ulaw(pcm16_8k)
 
-        await ws.send_bytes(pcmu_bytes)
+        await ws.send(pcmu_bytes)
 
 class Session:
     def __init__(self, ws, session_id, url):
