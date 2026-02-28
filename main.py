@@ -146,6 +146,7 @@ class Session:
             # Subscribe to agent audio → Genesys
             @self.livekit_room.on("track_subscribed")
             def on_track(track, pub, participant):
+                print("track subscribed: %s", pub.sid)
                 if track.kind == rtc.TrackKind.KIND_AUDIO:
                     asyncio.create_task(forward_agent_audio(track, self.ws))
 
