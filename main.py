@@ -46,7 +46,7 @@ class Session:
                 "id": payload["id"],
                 #"position": payload.get("position", "PT0.0S"),
                 "parameters": {
-                    "media": payload["media"],
+                    "media": payload["parameters"]["media"],
                     "supportedLanguages": [
                       "en-US", "en-GB", "fi-FI", "sv-SE"
                     ]
