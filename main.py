@@ -9,6 +9,7 @@ from livekit.api.access_token import VideoGrants
 import numpy as np
 from scipy.signal import resample
 # import audioop
+from livekit.rtc import AudioStream
 
 LIVEKIT_URL = "wss://voice-agent-7t8ve31g.livekit.cloud"
 API_KEY = "APIbQVgTaAddcUQ"
@@ -56,10 +57,15 @@ def resample_audio(pcm16_bytes: bytes, in_rate: int, out_rate: int) -> bytes:
 
 # --- Forward LiveKit agent audio → Genesys ---
 async def forward_agent_audio(track, ws):
-    async for frame in track:
-        pcm16_48k = frame.data  # PCM16 48kHz
+    audio_stream = AudioStream(track)
+
+    async for event in audio_stream:
+        frame = event.frame  # AudioFrame
+        pcm16_48k = frame.data  # PCM16 @ 48kHz
+
         pcm16_8k = resample_audio(pcm16_48k, 48000, 8000)
         pcmu_bytes = lin2ulaw(pcm16_8k)
+
         await ws.send_bytes(pcmu_bytes)
 
 class Session:
