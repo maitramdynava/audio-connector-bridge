@@ -36,16 +36,21 @@ class Session:
         if msg_type == "open":
             print("AudioHook stream opened")
 
-            self.send_seq = 0
+            self.send_seq = 1
 
             response = {
-                "type": "open",
                 "version": payload.get("version", "2"),
+                "type": "opened",
+                "seq": self.send_seq,
+                "clientseq": payload["seq"],
                 "id": payload["id"],
-                "seq": self.send_seq,              # MUST mirror client seq
-                "serverseq": payload["seq"],
                 #"position": payload.get("position", "PT0.0S"),
-                "parameters": {}
+                "parameters": {
+                    "media": payload["media"],
+                    "supportedLanguages": [
+                      "en-US", "en-GB", "fi-FI", "sv-SE"
+                    ]
+                }
             }
 
             print(f"Forward JSON message: {response}")
