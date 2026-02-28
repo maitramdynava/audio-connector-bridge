@@ -41,8 +41,8 @@ class Session:
                 "version": payload.get("version", "2"),
                 "id": payload["id"],
                 "seq": payload["seq"],              # MUST mirror client seq
-                "serverseq": payload["serverseq"] + 1,
-                "position": payload.get("position", "PT0.0S"),
+                "serverseq": payload["seq"],
+                #"position": payload.get("position", "PT0.0S"),
                 "parameters": {}
             }
 
