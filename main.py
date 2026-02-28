@@ -94,21 +94,23 @@ class Session:
         pcm16_48k = resample_audio(pcm16_8k, 8000, 48000)
 
         # 3. Build an AudioFrame
-        # LiveKit Python expects frames of a fixed duration (e.g., 10 ms)
-        # Calculate samples per channel
-        samples_per_channel = len(pcm16_48k) // (2 * 1)  # 2 bytes per sample, 1 channel
-        audio_frame = rtc.AudioFrame.create(48000, 1, samples_per_channel)
+        frame_size = 960 * 2  # 2 bytes per sample, mono
+        for i in range(0, len(pcm16_48k), frame_size):
+            chunk = pcm16_48k[i:i + frame_size]
+            if len(chunk) < frame_size:
+                continue  # skip incomplete frames
 
-        # Copy our resampled PCM16 into the frame's buffer
-        np.copyto(
-            np.frombuffer(audio_frame.data, dtype=np.int16),
-            np.frombuffer(pcm16_48k, dtype=np.int16)
-        )
+            # 4️⃣ Build AudioFrame
+            audio_frame = rtc.AudioFrame.create(48000, 1, 960)  # 48 kHz, 1 channel, 960 samples
+            np.copyto(
+                np.frombuffer(audio_frame.data, dtype=np.int16),
+                np.frombuffer(chunk, dtype=np.int16)
+            )
 
-        # 4. Capture frame via AudioSource
-        await self.local_audio_source.capture_frame(audio_frame)
+            # 5️⃣ Capture frame via AudioSource
+            await self.local_audio_source.capture_frame(audio_frame)
 
-        print(f"[{self.session_id}] Published {len(data)} bytes to LiveKit")
+        print(f"[{self.session_id}] Published {len(data)} bytes ({len(pcm16_48k) // 2} samples) to LiveKit")
 
     async def process_text_message(self, message: str):
         payload = json.loads(message)
@@ -163,6 +165,11 @@ class Session:
 
         elif msg_type == "close":
             print("Stream closing")
+            await self.livekit_room.disconnect()
+
+        elif msg_type == "error":
+            print("Stream closing")
+            await self.livekit_room.disconnect()
 
         elif msg_type == "ping":
             response.update({
