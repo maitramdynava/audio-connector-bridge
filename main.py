@@ -273,6 +273,12 @@ class Session:
             print("Playback completed — stopping audio send")
         elif msg_type == "playback_started":
             self.send_audio_event.clear()
+        elif msg_type == "disconnect":
+            # Prepare the mandatory 'closed' response
+            response.update({
+                "type": "closed"
+            })
+            await self.ws.send(json.dumps(response))
         elif msg_type == "close":
             print("Stream closing (close)")
             await self.livekit_room.disconnect()
@@ -299,8 +305,8 @@ async def handle_ws(ws):
     except Exception as e:
         print("WebSocket error:", e)
     finally:
-        await session.send_disconnect("session closed")
-        session.close()
+        #await session.send_disconnect("session closed")
+        #session.close()
         sessions.pop(ws, None)
         print("Session deleted:", session_id)
 
