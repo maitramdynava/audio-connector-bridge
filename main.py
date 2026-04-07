@@ -220,7 +220,7 @@ class Session:
                 if track.kind == rtc.TrackKind.KIND_AUDIO:
                     if not self.forwarding_active:
                         self.forwarding_active = True
-                        asyncio.ensure_future(forward_agent_audio(track, self.ws))
+                        asyncio.ensure_future(forward_agent_audio(track, self.ws, self.send_audio_event))
                     else:
                         print("WARNING: duplicate track_subscribed, ignoring")
 
@@ -231,7 +231,7 @@ class Session:
             # self.livekit_room = await create_room(self.session_id, f"room_{self.session_id}")
             # Create local track for Genesys caller → LiveKit agent
             self.local_audio_source = rtc.AudioSource(48000, 1)
-            local_track = rtc.LocalAudioTrack.create_audio_track("caller", self.local_audio_source, self.send_audio_event)
+            local_track = rtc.LocalAudioTrack.create_audio_track("caller", self.local_audio_source)
             await self.livekit_room.local_participant.publish_track(local_track)
             print("published caller track")
 
