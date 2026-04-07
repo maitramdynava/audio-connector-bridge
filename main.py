@@ -110,6 +110,7 @@ class Session:
         self.send_seq = 1
         self.livekit_room = None
         self.local_audio_source = None
+        self.audio_buffer = np.array([], dtype=np.int16)
 
     def close(self):
         # Clean up any resources, LiveKit tracks, etc.
@@ -130,27 +131,40 @@ class Session:
         pcm16_array = ulaw2lin(data)  # returns numpy int16 array
 
         # 2. Resample to 48 kHz (LiveKit expects 48kHz)
-        pcm16_8k = pcm16_array.tobytes()
+        # pcm16_8k = pcm16_array.tobytes()
+        pcm16_8k = ulaw2lin(data)
         pcm16_48k = resample_audio(pcm16_8k, 8000, 48000)
 
         # 3. Build an AudioFrame
-        frame_size = 960 * 2  # 2 bytes per sample, mono
-        for i in range(0, len(pcm16_48k), frame_size):
-            chunk = pcm16_48k[i:i + frame_size]
-            if len(chunk) < frame_size:
-                continue  # skip incomplete frames
+        SAMPLES_PER_FRAME = 960
+        while len(self.audio_buffer) >= SAMPLES_PER_FRAME:
+            chunk = self.audio_buffer[:SAMPLES_PER_FRAME]
+            self.audio_buffer = self.audio_buffer[SAMPLES_PER_FRAME:]
 
-            # 4️⃣ Build AudioFrame
-            audio_frame = rtc.AudioFrame.create(48000, 1, 960)  # 48 kHz, 1 channel, 960 samples
+            audio_frame = rtc.AudioFrame.create(48000, 1, SAMPLES_PER_FRAME)
             np.copyto(
                 np.frombuffer(audio_frame.data, dtype=np.int16),
-                np.frombuffer(chunk, dtype=np.int16)
+                chunk
             )
-
-            # 5️⃣ Capture frame via AudioSource
             await self.local_audio_source.capture_frame(audio_frame)
 
-        print(f"[{self.session_id}] Published {len(data)} bytes ({len(pcm16_48k) // 2} samples) to LiveKit")
+        # frame_size = 960 * 2  # 2 bytes per sample, mono
+        # for i in range(0, len(pcm16_48k), frame_size):
+        #     chunk = pcm16_48k[i:i + frame_size]
+        #     if len(chunk) < frame_size:
+        #         continue  # skip incomplete frames
+        #
+        #     # 4️⃣ Build AudioFrame
+        #     audio_frame = rtc.AudioFrame.create(48000, 1, 960)  # 48 kHz, 1 channel, 960 samples
+        #     np.copyto(
+        #         np.frombuffer(audio_frame.data, dtype=np.int16),
+        #         np.frombuffer(chunk, dtype=np.int16)
+        #     )
+        #
+        #     # 5️⃣ Capture frame via AudioSource
+        #     await self.local_audio_source.capture_frame(audio_frame)
+
+        print(f"buffer={len(self.audio_buffer)} samples pending")
 
     async def process_text_message(self, message: str):
         payload = json.loads(message)
