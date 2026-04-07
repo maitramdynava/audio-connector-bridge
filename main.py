@@ -62,25 +62,45 @@ FRAME_DURATION = 0.02  # 20ms
 async def forward_agent_audio(track, ws):
     audio_stream = AudioStream(track)
     send_buffer = bytearray()
-    async for event in audio_stream:
-        frame = event.frame  # AudioFrame
-        pcm16_48k = frame.data  # PCM16 @ 48kHz
 
+    async for event in audio_stream:
+        frame = event.frame
+        pcm16_48k = np.frombuffer(frame.data, dtype=np.int16)
         pcm16_8k = resample_audio(pcm16_48k, 48000, 8000)
         pcmu_bytes = lin2ulaw(pcm16_8k)
-
         send_buffer.extend(pcmu_bytes)
 
-        # print("PCMU bytes: ", len(pcmu_bytes))
-
-        # Send only when we have 20ms (160 bytes)
         while len(send_buffer) >= FRAME_SIZE:
             chunk = bytes(send_buffer[:FRAME_SIZE])
             print("chunk len: ", len(chunk))
             del send_buffer[:FRAME_SIZE]
+            try:
+                await ws.send(chunk)
+            except Exception:
+                print("exception in ws.send(chunk)")
+                return
 
-            await ws.send(chunk)
-            await asyncio.sleep(FRAME_DURATION)
+    # audio_stream = AudioStream(track)
+    # send_buffer = bytearray()
+    # async for event in audio_stream:
+    #     frame = event.frame  # AudioFrame
+    #     pcm16_48k = frame.data  # PCM16 @ 48kHz
+    #
+    #     pcm16_8k = resample_audio(pcm16_48k, 48000, 8000)
+    #     pcmu_bytes = lin2ulaw(pcm16_8k)
+    #
+    #     send_buffer.extend(pcmu_bytes)
+    #
+    #     # print("PCMU bytes: ", len(pcmu_bytes))
+    #
+    #     # Send only when we have 20ms (160 bytes)
+    #     while len(send_buffer) >= FRAME_SIZE:
+    #         chunk = bytes(send_buffer[:FRAME_SIZE])
+    #         print("chunk len: ", len(chunk))
+    #         del send_buffer[:FRAME_SIZE]
+    #
+    #         await ws.send(chunk)
+    #         await asyncio.sleep(FRAME_DURATION)
 
 class Session:
     def __init__(self, ws, session_id, url):
@@ -205,11 +225,11 @@ class Session:
             # Increment server seq for next message
             self.send_seq += 1
         elif msg_type == "close":
-            print("Stream closing")
+            print("Stream closing (close)")
             await self.livekit_room.disconnect()
 
         elif msg_type == "error":
-            print("Stream closing")
+            print("Stream closing (error)")
             await self.livekit_room.disconnect()
 
 # Session map
