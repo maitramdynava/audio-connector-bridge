@@ -10,6 +10,8 @@ import numpy as np
 from scipy.signal import resample
 import audioop
 from livekit.rtc import AudioStream
+from math import gcd
+from scipy.signal import resample_poly
 
 LIVEKIT_URL = "wss://voice-agent-7t8ve31g.livekit.cloud"
 API_KEY = "APIbQVgTaAddcUQ"
@@ -40,8 +42,10 @@ def ulaw2lin(ulaw_bytes: bytes) -> np.ndarray:
 # --- Helper: Resample PCM16 bytes ---
 def resample_audio(audio: np.ndarray, in_rate: int, out_rate: int) -> bytes:
     """Resample int16 ndarray from in_rate to out_rate."""
-    n_samples = int(len(audio) * out_rate / in_rate)
-    return resample(audio, n_samples).astype(np.int16)
+    g = gcd(in_rate, out_rate)
+    up = out_rate // g
+    down = in_rate // g
+    return resample_poly(audio, up, down).astype(np.int16)
 
 FRAME_SIZE = 1600  # 20ms @ 8kHz
 FRAME_DURATION = 0.2  # 20ms
