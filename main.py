@@ -56,7 +56,7 @@ def resample_audio(pcm16_bytes: bytes, in_rate: int, out_rate: int) -> bytes:
     return resampled.tobytes()
 
 FRAME_SIZE = 160  # 20ms @ 8kHz
-FRAME_DURATION = 0.02  # 20ms
+FRAME_DURATION = 0.03  # 20ms
 
 # --- Forward LiveKit agent audio → Genesys ---
 async def forward_agent_audio(track, ws):
@@ -70,6 +70,9 @@ async def forward_agent_audio(track, ws):
         pcm16_8k = resample_audio(pcm16_48k, 48000, 8000)
         pcmu_bytes = lin2ulaw(pcm16_8k)
         send_buffer.extend(pcmu_bytes)
+
+        print(
+            f"send_buffer size before drain: {len(send_buffer)}, frames to send: {len(send_buffer) // FRAME_SIZE}")  # ← here
 
         while len(send_buffer) >= FRAME_SIZE:
             now = asyncio.get_event_loop().time()
@@ -121,6 +124,7 @@ class Session:
         self.livekit_room = None
         self.local_audio_source = None
         self.audio_buffer = np.array([], dtype=np.int16)
+        self.forwarding_active = False  # in __init__
 
     def close(self):
         # Clean up any resources, LiveKit tracks, etc.
@@ -203,8 +207,14 @@ class Session:
 
             def on_track_subscribed(track, pub, participant):
                 print("track subscribed: %s", pub.sid)
+                # if track.kind == rtc.TrackKind.KIND_AUDIO:
+                #     asyncio.create_task(forward_agent_audio(track, self.ws))
                 if track.kind == rtc.TrackKind.KIND_AUDIO:
-                    asyncio.create_task(forward_agent_audio(track, self.ws))
+                    if not self.forwarding_active:
+                        self.forwarding_active = True
+                        asyncio.ensure_future(forward_agent_audio(track, self.ws))
+                    else:
+                        print("WARNING: duplicate track_subscribed, ignoring")
 
             self.livekit_room.on("track_subscribed", on_track_subscribed)
 
