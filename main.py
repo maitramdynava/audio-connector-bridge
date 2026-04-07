@@ -62,6 +62,7 @@ FRAME_DURATION = 0.02  # 20ms
 async def forward_agent_audio(track, ws):
     audio_stream = AudioStream(track)
     send_buffer = bytearray()
+    next_send_time = None
 
     async for event in audio_stream:
         frame = event.frame
@@ -71,14 +72,23 @@ async def forward_agent_audio(track, ws):
         send_buffer.extend(pcmu_bytes)
 
         while len(send_buffer) >= FRAME_SIZE:
+            now = asyncio.get_event_loop().time()
+
+            # Initialize or enforce 20ms spacing
+            if next_send_time is None:
+                next_send_time = now
+            elif next_send_time > now:
+                await asyncio.sleep(next_send_time - now)
+
             chunk = bytes(send_buffer[:FRAME_SIZE])
-            print("chunk len: ", len(chunk))
             del send_buffer[:FRAME_SIZE]
+
             try:
                 await ws.send(chunk)
             except Exception:
-                print("exception in ws.send(chunk)")
                 return
+
+            next_send_time += FRAME_DURATION  # advance by exactly 20ms
 
     # audio_stream = AudioStream(track)
     # send_buffer = bytearray()
