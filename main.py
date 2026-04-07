@@ -156,7 +156,7 @@ class Session:
         # 3. Build an AudioFrame
         SAMPLES_PER_FRAME = 960
         while len(self.audio_buffer) >= SAMPLES_PER_FRAME:
-            chunk = np.ascontiguousarray(self.audio_buffer[:SAMPLES_PER_FRAME])
+            chunk = self.audio_buffer[:SAMPLES_PER_FRAME]
             self.audio_buffer = self.audio_buffer[SAMPLES_PER_FRAME:]
 
             audio_frame = rtc.AudioFrame.create(48000, 1, SAMPLES_PER_FRAME)
