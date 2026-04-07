@@ -75,6 +75,10 @@ async def forward_agent_audio(track, ws):
             f"send_buffer size before drain: {len(send_buffer)}, frames to send: {len(send_buffer) // FRAME_SIZE}")  # ← here
 
         while len(send_buffer) >= FRAME_SIZE:
+            if not self.can_send_audio:
+                send_buffer.clear()  # discard — Genesys won't accept it
+                break
+
             now = asyncio.get_event_loop().time()
 
             # Initialize or enforce 20ms spacing
@@ -125,6 +129,7 @@ class Session:
         self.local_audio_source = None
         self.audio_buffer = np.array([], dtype=np.int16)
         self.forwarding_active = False  # in __init__
+        self.can_send_audio = False  # in __init__
 
     def close(self):
         # Clean up any resources, LiveKit tracks, etc.
@@ -201,6 +206,7 @@ class Session:
 
         if msg_type == "open":
             print("AudioHook stream opened")
+            self.can_send_audio = True
 
             token = create_livekit_token(self.session_id, f"room_{self.session_id}")
             self.livekit_room = rtc.Room()
@@ -258,6 +264,11 @@ class Session:
 
             # Increment server seq for next message
             self.send_seq += 1
+        elif msg_type == "playback_completed":
+            self.can_send_audio = False  # Genesys is done, stop sending
+            print("Playback completed — stopping audio send")
+        elif msg_type == "playback_started":
+            self.can_send_audio = True
         elif msg_type == "close":
             print("Stream closing (close)")
             await self.livekit_room.disconnect()
