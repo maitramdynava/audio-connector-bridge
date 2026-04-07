@@ -45,7 +45,8 @@ def resample_audio(audio: np.ndarray, in_rate: int, out_rate: int) -> bytes:
     g = gcd(in_rate, out_rate)
     up = out_rate // g
     down = in_rate // g
-    return resample_poly(audio, up, down).astype(np.int16)
+    resampled = resample_poly(audio, up, down).astype(np.int16)
+    return np.clip(resampled, -32768, 32767).astype(np.int16)  # clip before cast
 
 FRAME_SIZE = 1600  # 20ms @ 8kHz
 FRAME_DURATION = 0.2  # 20ms
@@ -155,7 +156,7 @@ class Session:
         # 3. Build an AudioFrame
         SAMPLES_PER_FRAME = 960
         while len(self.audio_buffer) >= SAMPLES_PER_FRAME:
-            chunk = self.audio_buffer[:SAMPLES_PER_FRAME]
+            chunk = np.ascontiguousarray(self.audio_buffer[:SAMPLES_PER_FRAME])
             self.audio_buffer = self.audio_buffer[SAMPLES_PER_FRAME:]
 
             audio_frame = rtc.AudioFrame.create(48000, 1, SAMPLES_PER_FRAME)
