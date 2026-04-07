@@ -279,9 +279,14 @@ class Session:
                 "type": "closed"
             })
             await self.ws.send(json.dumps(response))
+            await self.livekit_room.disconnect()
         elif msg_type == "close":
             print("Stream closing (close)")
-            await self.livekit_room.disconnect()
+            response.update({
+                "type": "closed"
+            })
+            await self.ws.send(json.dumps(response))
+            # await self.livekit_room.disconnect()
 
         elif msg_type == "error":
             print("Stream closing (error)")
@@ -305,8 +310,8 @@ async def handle_ws(ws):
     except Exception as e:
         print("WebSocket error:", e)
     finally:
-        #await session.send_disconnect("session closed")
-        #session.close()
+        await session.send_disconnect("session closed")
+        session.close()
         sessions.pop(ws, None)
         print("Session deleted:", session_id)
 
