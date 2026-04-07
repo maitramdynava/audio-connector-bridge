@@ -8,7 +8,7 @@ from livekit.api.access_token import AccessToken
 from livekit.api.access_token import VideoGrants
 import numpy as np
 from scipy.signal import resample
-# import audioop
+import audioop
 from livekit.rtc import AudioStream
 
 LIVEKIT_URL = "wss://voice-agent-7t8ve31g.livekit.cloud"
@@ -28,32 +28,20 @@ async def create_room(identity: str, room: str):
     await room.connect(LIVEKIT_URL, token)
     return room
 
-def lin2ulaw(pcm16_bytes: bytes) -> bytes:
-    """Convert PCM16 bytes to 8-bit µ-law bytes."""
-    pcm = np.frombuffer(pcm16_bytes, dtype=np.int16)
-    pcm = np.clip(pcm, -32768, 32767)
-    magnitude = np.abs(pcm)
-    exponent = np.floor(np.log2(magnitude + 1e-9)).astype(np.int16)
-    mantissa = (magnitude >> (exponent - 4)) & 0x0F
-    ulaw = ((pcm < 0).astype(np.int16) << 7) | ((exponent & 0x07) << 4) | mantissa
-    ulaw = (ulaw + 128).astype(np.uint8)
-    return ulaw.tobytes()
+def lin2ulaw(pcm16: np.ndarray) -> bytes:
+    """Convert int16 ndarray to µ-law bytes."""
+    return audioop.lin2ulaw(pcm16.tobytes(), 2)
 
 def ulaw2lin(ulaw_bytes: bytes) -> np.ndarray:
-    """Convert 8-bit µ-law bytes to PCM16 numpy array."""
-    ulaw = np.frombuffer(ulaw_bytes, dtype=np.uint8).astype(np.int16)
-    ulaw = ulaw - 128
-    magnitude = ((ulaw & 0x0F) << 3) + 0x84
-    magnitude <<= ((ulaw & 0x70) >> 4)
-    pcm16 = np.where(ulaw & 0x80, 0x84 - magnitude, magnitude - 0x84)
-    return pcm16
+    """Convert µ-law bytes to int16 ndarray."""
+    pcm_bytes = audioop.ulaw2lin(ulaw_bytes, 2)
+    return np.frombuffer(pcm_bytes, dtype=np.int16)
 
 # --- Helper: Resample PCM16 bytes ---
 def resample_audio(pcm16_bytes: bytes, in_rate: int, out_rate: int) -> bytes:
-    audio = np.frombuffer(pcm16_bytes, dtype=np.int16)
+    """Resample int16 ndarray from in_rate to out_rate."""
     n_samples = int(len(audio) * out_rate / in_rate)
-    resampled = resample(audio, n_samples).astype(np.int16)
-    return resampled.tobytes()
+    return resample(audio, n_samples).astype(np.int16)
 
 FRAME_SIZE = 1600  # 20ms @ 8kHz
 FRAME_DURATION = 0.2  # 20ms
@@ -69,6 +57,7 @@ async def forward_agent_audio(track, ws, send_gate: asyncio.Event):
         pcm16_48k = np.frombuffer(frame.data, dtype=np.int16)
         pcm16_8k = resample_audio(pcm16_48k, 48000, 8000)
         pcmu_bytes = lin2ulaw(pcm16_8k)
+
         send_buffer.extend(pcmu_bytes)
 
         print(
@@ -150,13 +139,14 @@ class Session:
             print(f"[{self.session_id}] Received audio before OPEN. Ignoring.")
             return
 
-        # 1. Convert PCMU → PCM16
-        pcm16_array = ulaw2lin(data)  # returns numpy int16 array
-
-        # 2. Resample to 48 kHz (LiveKit expects 48kHz)
-        # pcm16_8k = pcm16_array.tobytes()
+        # 1. PCMU → PCM16 @ 8kHz
         pcm16_8k = ulaw2lin(data)
+
+        # 2. Resample 8kHz → 48kHz
         pcm16_48k = resample_audio(pcm16_8k, 8000, 48000)
+
+        # 3. Append to buffer
+        self.audio_buffer = np.concatenate([self.audio_buffer, pcm16_48k])
 
         # 3. Build an AudioFrame
         SAMPLES_PER_FRAME = 960
