@@ -59,7 +59,7 @@ FRAME_SIZE = 160  # 20ms @ 8kHz
 FRAME_DURATION = 0.03  # 20ms
 
 # --- Forward LiveKit agent audio → Genesys ---
-async def forward_agent_audio(track, ws):
+async def forward_agent_audio(track, ws, send_gate: asyncio.Event):
     audio_stream = AudioStream(track)
     send_buffer = bytearray()
     next_send_time = None
@@ -75,6 +75,12 @@ async def forward_agent_audio(track, ws):
             f"send_buffer size before drain: {len(send_buffer)}, frames to send: {len(send_buffer) // FRAME_SIZE}")  # ← here
 
         while len(send_buffer) >= FRAME_SIZE:
+            if not send_gate.is_set():
+                print("Send-gate not set! Ignoring")
+                send_buffer.clear()  # discard stale audio
+                next_send_time = None  # reset pacing
+                break
+
             now = asyncio.get_event_loop().time()
 
             # Initialize or enforce 20ms spacing
@@ -87,6 +93,8 @@ async def forward_agent_audio(track, ws):
             del send_buffer[:FRAME_SIZE]
 
             try:
+                print(
+                    f"ws send size: {len(chunk)}")
                 await ws.send(chunk)
             except Exception:
                 return
@@ -212,9 +220,9 @@ class Session:
                 # if track.kind == rtc.TrackKind.KIND_AUDIO:
                 #     asyncio.create_task(forward_agent_audio(track, self.ws))
                 if track.kind == rtc.TrackKind.KIND_AUDIO:
-                    if not self.forwarding_active and self.send_audio_event.is_set():
+                    if not self.forwarding_active:
                         self.forwarding_active = True
-                        asyncio.ensure_future(forward_agent_audio(track, self.ws))
+                        asyncio.ensure_future(forward_agent_audio(track, self.ws, self.send_audio_event))
                     else:
                         print("WARNING: duplicate track_subscribed, ignoring")
 
