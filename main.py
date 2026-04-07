@@ -266,6 +266,7 @@ class Session:
         elif msg_type == "playback_completed":
             # self.send_audio_event.set()  # Genesys is done, stop sending
             print("Playback completed — starting audio send")
+            await self.send_disconnect("session closed")
         elif msg_type == "playback_started":
             # self.send_audio_event.clear()
             print("Playback completed — stopping audio send")
