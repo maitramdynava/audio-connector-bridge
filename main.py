@@ -52,16 +52,34 @@ FRAME_SIZE = 1600  # 20ms @ 8kHz
 FRAME_DURATION = 0.2  # 20ms
 
 # --- Forward LiveKit agent audio → Genesys ---
-async def forward_agent_audio(track, ws, send_gate: asyncio.Event):
+async def forward_agent_audio(track, ws, send_gate: asyncio.Event, on_turn_end):
     audio_stream = AudioStream(track)
     send_buffer = bytearray()
     next_send_time = None
+
+    silent_frames = 0
+    SILENCE_FRAMES = 50   # 50 * 20ms = 1 second of silence
+    has_spoken = False    # don't close before agent says anything
 
     async for event in audio_stream:
         frame = event.frame
         pcm16_48k = np.frombuffer(frame.data, dtype=np.int16)
         pcm16_8k = resample_audio(pcm16_48k, 48000, 8000)
         pcmu_bytes = lin2ulaw(pcm16_8k)
+
+        is_silent = np.max(np.abs(pcm16_48k)) < 10
+
+        if is_silent:
+            if has_spoken:
+                silent_frames += 1
+                if silent_frames >= SILENCE_FRAMES:
+                    print("Agent done speaking — sending close")
+                    silent_frames = 0
+                    has_spoken = False
+                    await on_turn_end()  # triggers send_close()
+        else:
+            has_spoken = True
+            silent_frames = 0
 
         send_buffer.extend(pcmu_bytes)
 
@@ -133,7 +151,7 @@ class Session:
         # Clean up any resources, LiveKit tracks, etc.
         pass
 
-    async def send_disconnect(self, reason: str):
+    async def send_disconnect(self, reason: str = "Session closed"):
         await self.ws.send(json.dumps({"event": "disconnect", "reason": reason}))
 
     async def process_binary_message(self, data: bytes):
@@ -217,7 +235,12 @@ class Session:
                 if track.kind == rtc.TrackKind.KIND_AUDIO:
                     if not self.forwarding_active:
                         self.forwarding_active = True
-                        asyncio.ensure_future(forward_agent_audio(track, self.ws, self.send_audio_event))
+                        asyncio.ensure_future(forward_agent_audio(
+                            track,
+                            self.ws,
+                            self.send_audio_event,
+                            self.send_disconnect
+                        ))
                     else:
                         print("WARNING: duplicate track_subscribed, ignoring")
 
@@ -269,7 +292,7 @@ class Session:
             await self.send_disconnect("session closed")
         elif msg_type == "playback_started":
             # self.send_audio_event.clear()
-            print("Playback completed — stopping audio send")
+            print("Playback started — stopping audio send")
         elif msg_type == "close" or msg_type == "disconnect":
             print("Stream closing (close)", msg_type)
             response.update({
