@@ -55,7 +55,7 @@ def resample_audio(pcm16_bytes: bytes, in_rate: int, out_rate: int) -> bytes:
     resampled = resample(audio, n_samples).astype(np.int16)
     return resampled.tobytes()
 
-FRAME_SIZE = 240  # 20ms @ 8kHz
+FRAME_SIZE = 1600  # 20ms @ 8kHz
 FRAME_DURATION = 0.02  # 20ms
 
 # --- Forward LiveKit agent audio → Genesys ---
