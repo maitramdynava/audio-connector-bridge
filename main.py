@@ -261,10 +261,10 @@ class Session:
             # Increment server seq for next message
             self.send_seq += 1
         elif msg_type == "playback_completed":
-            self.send_audio_event.clear()  # Genesys is done, stop sending
+            self.send_audio_event.set()  # Genesys is done, stop sending
             print("Playback completed — stopping audio send")
         elif msg_type == "playback_started":
-            self.send_audio_event.set()
+            self.send_audio_event.clear()
         elif msg_type == "close":
             print("Stream closing (close)")
             await self.livekit_room.disconnect()
