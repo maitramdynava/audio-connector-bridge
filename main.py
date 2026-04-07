@@ -38,7 +38,7 @@ def ulaw2lin(ulaw_bytes: bytes) -> np.ndarray:
     return np.frombuffer(pcm_bytes, dtype=np.int16)
 
 # --- Helper: Resample PCM16 bytes ---
-def resample_audio(pcm16_bytes: bytes, in_rate: int, out_rate: int) -> bytes:
+def resample_audio(audio: np.ndarray, in_rate: int, out_rate: int) -> bytes:
     """Resample int16 ndarray from in_rate to out_rate."""
     n_samples = int(len(audio) * out_rate / in_rate)
     return resample(audio, n_samples).astype(np.int16)
