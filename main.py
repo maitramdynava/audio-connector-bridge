@@ -273,21 +273,13 @@ class Session:
             print("Playback completed — stopping audio send")
         elif msg_type == "playback_started":
             self.send_audio_event.clear()
-        elif msg_type == "disconnect":
-            # Prepare the mandatory 'closed' response
+        elif msg_type == "close" or msg_type == "disconnect":
+            print("Stream closing (close)", msg_type)
             response.update({
                 "type": "closed"
             })
             await self.ws.send(json.dumps(response))
             await self.livekit_room.disconnect()
-        elif msg_type == "close":
-            print("Stream closing (close)")
-            response.update({
-                "type": "closed"
-            })
-            await self.ws.send(json.dumps(response))
-            # await self.livekit_room.disconnect()
-
         elif msg_type == "error":
             print("Stream closing (error)")
             await self.livekit_room.disconnect()
