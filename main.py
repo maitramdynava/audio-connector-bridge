@@ -59,7 +59,7 @@ FRAME_SIZE = 160  # 20ms @ 8kHz
 FRAME_DURATION = 0.03  # 20ms
 
 # --- Forward LiveKit agent audio → Genesys ---
-async def forward_agent_audio(track, ws):
+async def forward_agent_audio(track, ws, send_gate: asyncio.Event):
     audio_stream = AudioStream(track)
     send_buffer = bytearray()
     next_send_time = None
@@ -75,8 +75,10 @@ async def forward_agent_audio(track, ws):
             f"send_buffer size before drain: {len(send_buffer)}, frames to send: {len(send_buffer) // FRAME_SIZE}")  # ← here
 
         while len(send_buffer) >= FRAME_SIZE:
-            if not self.can_send_audio:
-                send_buffer.clear()  # discard — Genesys won't accept it
+            if not send_gate.is_set():
+                print("Send-gate not set! Ignoring")
+                send_buffer.clear()  # discard stale audio
+                next_send_time = None  # reset pacing
                 break
 
             now = asyncio.get_event_loop().time()
@@ -129,7 +131,7 @@ class Session:
         self.local_audio_source = None
         self.audio_buffer = np.array([], dtype=np.int16)
         self.forwarding_active = False  # in __init__
-        self.can_send_audio = False  # in __init__
+        self.send_audio_event = asyncio.Event()
 
     def close(self):
         # Clean up any resources, LiveKit tracks, etc.
@@ -206,7 +208,7 @@ class Session:
 
         if msg_type == "open":
             print("AudioHook stream opened")
-            self.can_send_audio = True
+            self.send_audio_event.set()
 
             token = create_livekit_token(self.session_id, f"room_{self.session_id}")
             self.livekit_room = rtc.Room()
@@ -229,7 +231,7 @@ class Session:
             # self.livekit_room = await create_room(self.session_id, f"room_{self.session_id}")
             # Create local track for Genesys caller → LiveKit agent
             self.local_audio_source = rtc.AudioSource(48000, 1)
-            local_track = rtc.LocalAudioTrack.create_audio_track("caller", self.local_audio_source)
+            local_track = rtc.LocalAudioTrack.create_audio_track("caller", self.local_audio_source, self.send_audio_event)
             await self.livekit_room.local_participant.publish_track(local_track)
             print("published caller track")
 
@@ -265,10 +267,10 @@ class Session:
             # Increment server seq for next message
             self.send_seq += 1
         elif msg_type == "playback_completed":
-            self.can_send_audio = False  # Genesys is done, stop sending
+            self.send_audio_event.clear()  # Genesys is done, stop sending
             print("Playback completed — stopping audio send")
         elif msg_type == "playback_started":
-            self.can_send_audio = True
+            self.send_audio_event.set()
         elif msg_type == "close":
             print("Stream closing (close)")
             await self.livekit_room.disconnect()
