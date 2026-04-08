@@ -164,6 +164,7 @@ class Session:
                 "reason": reason,
             }
         }
+        print(f"Forward JSON message: {msg}")
         await self.ws.send(json.dumps(msg))
         self.send_seq += 1
         # await self.ws.send(json.dumps({"type": "disconnect", "reason": reason}))
@@ -337,10 +338,10 @@ async def handle_ws(ws):
     except Exception as e:
         print("WebSocket error:", e)
     finally:
-        await session.send_disconnect("session closed")
-        session.close()
-        sessions.pop(ws, None)
-        print("Session deleted:", session_id)
+        # await session.send_disconnect("session closed")
+        # session.close()
+        # sessions.pop(ws, None)
+        print("Session completed:", session_id)
 
 async def main():
     # port = int(os.environ.get("PORT", 8765))
