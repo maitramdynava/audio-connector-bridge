@@ -76,7 +76,7 @@ async def forward_agent_audio(track, ws, send_gate: asyncio.Event, on_turn_end):
                     print("Agent done speaking — sending close")
                     silent_frames = 0
                     has_spoken = False
-                    await on_turn_end()  # triggers send_close()
+                    # await on_turn_end()  # triggers send_close()
                     return
         else:
             has_spoken = True
@@ -165,6 +165,7 @@ class Session:
             }
         }
         await self.ws.send(json.dumps(msg))
+        self.send_seq += 1
         # await self.ws.send(json.dumps({"type": "disconnect", "reason": reason}))
 
     async def process_binary_message(self, data: bytes):
