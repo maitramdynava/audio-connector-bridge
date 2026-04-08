@@ -147,13 +147,25 @@ class Session:
         self.audio_buffer = np.array([], dtype=np.int16)
         self.forwarding_active = False  # in __init__
         self.send_audio_event = asyncio.Event()
+        self.client_seq = None
 
     def close(self):
         # Clean up any resources, LiveKit tracks, etc.
         pass
 
-    async def send_disconnect(self, reason: str = "Session closed"):
-        await self.ws.send(json.dumps({"event": "disconnect", "reason": reason}))
+    async def send_disconnect(self, reason: str = "completed"):
+        msg = {
+            "version": "2",
+            "type": "disconnect",
+            "seq": self.send_seq,
+            "clientseq": self.client_seq,
+            "id": self.session_id,
+            "parameters": {
+                "reason": reason,
+            }
+        }
+        await self.ws.send(json.dumps(msg))
+        # await self.ws.send(json.dumps({"type": "disconnect", "reason": reason}))
 
     async def process_binary_message(self, data: bytes):
         # Handle Genesys audio payload
@@ -207,6 +219,7 @@ class Session:
         payload = json.loads(message)
         print(f"Received JSON message: {payload}")
         # Handle 'start', 'media', 'stop'
+        self.client_seq = payload["seq"]
 
         try:
             payload = json.loads(message)
