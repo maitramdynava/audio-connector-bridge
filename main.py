@@ -198,7 +198,7 @@ class Session:
                 chunk
             )
             await self.local_audio_source.capture_frame(audio_frame)
-
+            print("DEBUG: Captured one 20ms frame to LiveKit")  # Add this
         # frame_size = 960 * 2  # 2 bytes per sample, mono
         # for i in range(0, len(pcm16_48k), frame_size):
         #     chunk = pcm16_48k[i:i + frame_size]
@@ -267,8 +267,12 @@ class Session:
             # self.livekit_room = await create_room(self.session_id, f"room_{self.session_id}")
             # Create local track for Genesys caller → LiveKit agent
             self.local_audio_source = rtc.AudioSource(48000, 1)
-            local_track = rtc.LocalAudioTrack.create_audio_track("caller", self.local_audio_source)
-            await self.livekit_room.local_participant.publish_track(local_track)
+            local_track = rtc.LocalAudioTrack.create_audio_track("genesys-client", self.local_audio_source)
+
+            options = rtc.TrackPublishOptions()
+            options.source = rtc.TrackSource.SOURCE_MICROPHONE
+
+            await self.livekit_room.local_participant.publish_track(local_track, options)
             print("published caller track")
 
             # Subscribe to agent audio → Genesys
