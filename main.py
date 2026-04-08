@@ -77,7 +77,7 @@ async def forward_agent_audio(track, ws, send_gate: asyncio.Event, on_turn_end):
                     silent_frames = 0
                     has_spoken = False
                     # await on_turn_end()  # triggers send_close()
-                    return
+                    # return
         else:
             has_spoken = True
             silent_frames = 0
