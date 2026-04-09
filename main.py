@@ -48,8 +48,8 @@ def resample_audio(audio: np.ndarray, in_rate: int, out_rate: int) -> bytes:
     resampled = resample_poly(audio, up, down).astype(np.int16)
     return np.clip(resampled, -32768, 32767).astype(np.int16)  # clip before cast
 
-FRAME_SIZE = 1600  # 20ms @ 8kHz
 FRAME_DURATION = 0.2  # 200ms
+FRAME_SIZE_TO_GENESYS = 8000 * FRAME_DURATION
 
 # --- Forward LiveKit agent audio → Genesys ---
 async def forward_agent_audio(track, ws, send_gate: asyncio.Event, on_turn_end):
@@ -87,7 +87,7 @@ async def forward_agent_audio(track, ws, send_gate: asyncio.Event, on_turn_end):
         print(
             f"send_buffer size before drain: {len(send_buffer)}, frames to send: {len(send_buffer) // FRAME_SIZE}")  # ← here
 
-        while len(send_buffer) >= FRAME_SIZE:
+        while len(send_buffer) >= FRAME_SIZE_TO_GENESYS:
             if not send_gate.is_set():
                 print("Send-gate not set! Ignoring")
                 send_buffer.clear()  # discard stale audio
@@ -102,8 +102,8 @@ async def forward_agent_audio(track, ws, send_gate: asyncio.Event, on_turn_end):
             elif next_send_time > now:
                 await asyncio.sleep(next_send_time - now)
 
-            chunk = bytes(send_buffer[:FRAME_SIZE])
-            del send_buffer[:FRAME_SIZE]
+            chunk = bytes(send_buffer[:FRAME_SIZE_TO_GENESYS])
+            del send_buffer[:FRAME_SIZE_TO_GENESYS]
 
             try:
                 print(
@@ -187,7 +187,7 @@ class Session:
         self.audio_buffer = np.concatenate([self.audio_buffer, pcm16_48k])
 
         # 3. Build an AudioFrame
-        SAMPLES_PER_FRAME = 9600
+        SAMPLES_PER_FRAME = 48000 * FRAME_DURATION
         while len(self.audio_buffer) >= SAMPLES_PER_FRAME:
             chunk = self.audio_buffer[:SAMPLES_PER_FRAME]
             self.audio_buffer = self.audio_buffer[SAMPLES_PER_FRAME:]
