@@ -85,7 +85,7 @@ async def forward_agent_audio(track, ws, send_gate: asyncio.Event, on_turn_end):
         send_buffer.extend(pcmu_bytes)
 
         print(
-            f"send_buffer size before drain: {len(send_buffer)}, frames to send: {len(send_buffer) // FRAME_SIZE}")  # ← here
+            f"send_buffer size before drain: {len(send_buffer)}, frames to send: {len(send_buffer) // FRAME_SIZE_TO_GENESYS}")  # ← here
 
         while len(send_buffer) >= FRAME_SIZE_TO_GENESYS:
             if not send_gate.is_set():
@@ -113,28 +113,6 @@ async def forward_agent_audio(track, ws, send_gate: asyncio.Event, on_turn_end):
                 return
 
             next_send_time += FRAME_DURATION  # advance by exactly 20ms
-
-    # audio_stream = AudioStream(track)
-    # send_buffer = bytearray()
-    # async for event in audio_stream:
-    #     frame = event.frame  # AudioFrame
-    #     pcm16_48k = frame.data  # PCM16 @ 48kHz
-    #
-    #     pcm16_8k = resample_audio(pcm16_48k, 48000, 8000)
-    #     pcmu_bytes = lin2ulaw(pcm16_8k)
-    #
-    #     send_buffer.extend(pcmu_bytes)
-    #
-    #     # print("PCMU bytes: ", len(pcmu_bytes))
-    #
-    #     # Send only when we have 20ms (160 bytes)
-    #     while len(send_buffer) >= FRAME_SIZE:
-    #         chunk = bytes(send_buffer[:FRAME_SIZE])
-    #         print("chunk len: ", len(chunk))
-    #         del send_buffer[:FRAME_SIZE]
-    #
-    #         await ws.send(chunk)
-    #         await asyncio.sleep(FRAME_DURATION)
 
 class Session:
     def __init__(self, ws, session_id, url):
