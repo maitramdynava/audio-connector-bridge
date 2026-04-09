@@ -49,7 +49,7 @@ def resample_audio(audio: np.ndarray, in_rate: int, out_rate: int) -> bytes:
     return np.clip(resampled, -32768, 32767).astype(np.int16)  # clip before cast
 
 FRAME_DURATION = 0.2  # 200ms
-FRAME_SIZE_TO_GENESYS = 8000 * FRAME_DURATION
+FRAME_SIZE_TO_GENESYS = int(8000 * FRAME_DURATION)
 
 # --- Forward LiveKit agent audio → Genesys ---
 async def forward_agent_audio(track, ws, send_gate: asyncio.Event, on_turn_end):
@@ -165,7 +165,7 @@ class Session:
         self.audio_buffer = np.concatenate([self.audio_buffer, pcm16_48k])
 
         # 3. Build an AudioFrame
-        SAMPLES_PER_FRAME = 48000 * FRAME_DURATION
+        SAMPLES_PER_FRAME = int(48000 * FRAME_DURATION)
         while len(self.audio_buffer) >= SAMPLES_PER_FRAME:
             chunk = self.audio_buffer[:SAMPLES_PER_FRAME]
             self.audio_buffer = self.audio_buffer[SAMPLES_PER_FRAME:]
