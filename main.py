@@ -12,10 +12,13 @@ import audioop
 from livekit.rtc import AudioStream
 from math import gcd
 from scipy.signal import resample_poly
+from dotenv import load_dotenv
 
-LIVEKIT_URL = "wss://voice-agent-7t8ve31g.livekit.cloud"
-API_KEY = "APIbQVgTaAddcUQ"
-API_SECRET = "hi5iBYBCmk65N4S4k8Rfyj9IzzdBEzCbTjy0KGSRzHB"
+load_dotenv()
+
+LIVEKIT_URL = os.getenv("LIVEKIT_URL")
+API_KEY = os.getenv("LIVEKIT_API_KEY")
+API_SECRET = os.getenv("LIVEKIT_API_SECRET")
 
 def create_livekit_token(identity: str, room: str) -> str:
     token = AccessToken(api_key=API_KEY, api_secret=API_SECRET)
@@ -326,8 +329,8 @@ async def handle_ws(ws):
         print("Session completed:", session_id)
 
 async def main():
-    # port = int(os.environ.get("PORT", 8765))
-    port = int(8765)
+    port = int(os.environ.get("PORT", 8765))
+    # port = int(8765)
     async with websockets.serve(handle_ws, "0.0.0.0", port):
         print(f"WSS server running on port {port}")
         await asyncio.Future()  # keep alive
